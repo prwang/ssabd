@@ -20,7 +20,7 @@ struct edge {
     pool[maxn * 10], *pool_end = pool;
 
 
-static int  n, //点数
+static int
     stack[maxn], sc, ts, //tarjan栈、时间戳
     dfn[maxn], low[maxn], //深度标记
     cor[maxn], n1, in_deg[maxn]; //对应等价类，等价类个数、等价类入度
@@ -34,7 +34,6 @@ inline void add_edge3(int u, int v, edge** G1)
 }
 void clear()
 {
-#define CLR(x) memset(x, 0, sizeof(x));
   pool_end = pool; ts = sc = n1 = n = 0;
   CLR(G); CLR(G_topo); CLR(in_deg);
   CLR(stack); CLR(dfn); CLR(low); CLR(cor); CLR(in_stack);
@@ -73,6 +72,8 @@ static void tarjan(int u, int fr)
 }
 
 interval result[maxn];
+// 全部公用一张图是没问题的，每一个函数的所有参数连的一个超级节点上。
+// 在逻辑的图的表示上
 
 /// \brief 求强连通分量并缩点建新图
 static inline void do_tarjan(int _n)
@@ -94,29 +95,6 @@ static inline void do_tarjan(int _n)
 
 }
 
-/// \brief 三步法处理强连通分量
-static inline void do_scc(int scc_id)
-{
-  //widening: spfa
-  static int queue[maxn]; int qh(0), qt(0);
-  for (int u : scc_cont[scc_id]) {
-    queue[qt++] = u;
-  }
-  while (qh < qt) {
-    //TODO case type of
-    // operation: 所有参数齐备，调用operator()进行求值
-
-    // PHI: evaluate_partial 先算出一个东西再说
-    // 特别地这里要和上一次的结果去比较，如果变大了要产生无穷
-
-  }
-//TODO
-  //note 这里不能走is_cut == true 的边
-
-  //future resolution
-  //narrowing
-}
-
 /// \brief 拓扑排序并调用强连通分量的处理函数
 static inline void topo_sort()
 {
@@ -126,7 +104,7 @@ static inline void topo_sort()
   }
   while (qh < qt) {
     int o = queue[qh++];
-    do_scc(o); //对变量的求值都放在do_scc里面了，不用再求值了
+    //TODO 这里不能调用do_scc，而应该输出顺序供以后使用
     for (edge* p = G_topo[o]; p; p = p->next) {
       if (--in_deg[p->v] == 0)
         queue[qt++] = p->v;

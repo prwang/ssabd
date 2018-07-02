@@ -5,7 +5,7 @@
 #ifndef SSABD_MAIN_H
 #define SSABD_MAIN_H
 
-extern void yyparse();
 #include "common.h"
 #include "scc.h"
+#include "SDT.h"
 #endif //SSABD_MAIN_H

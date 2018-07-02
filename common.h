@@ -7,23 +7,16 @@
 #include <map>
 #include <set>
 #include <cassert>
-#include <string>
 #include <cmath>
+#include <vector>
+#include <unordered_map>
+#include <cstring>
 
+#define LOGM(...) fprintf(stderr,"LOGM\t"__FILE__"\t"__LINE__":\t" __VA_ARGS__)
+#define CLR(x) memset(x, 0, sizeof(x));
 using namespace std;
-struct env_t_factory
-{
-  struct env_t
-  {
-  private:
-    env_t *previous;
-    map<int, string> nametb;
-    map<string, int> stringtb;
-  };
-  env_t * current;
-  void push();
-  void pop();
-} ENV; //似乎只有一层？词法环境的必要性存疑
+
+
 
 
 #endif //PROJECT_COMMON_H
