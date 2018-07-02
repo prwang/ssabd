@@ -11,8 +11,8 @@
 using namespace std;
 #include "scc.h"
 #include "interval.h"
+#include "nodes.h"
 
-constexpr int maxn = 500362;
 struct edge {
   bool is_cut; int v;
   edge* next;
@@ -76,12 +76,13 @@ interval result[maxn];
 // 在逻辑的图的表示上
 
 /// \brief 求强连通分量并缩点建新图
-static inline void do_tarjan(int _n)
+static inline void do_tarjan(int start)
 {
-  n = _n;
-  n1 = 0; pool_end = pool;
-  tarjan(1, 0);
+
+  tarjan(start, 0);
+
   for (int u = 1; u <= n; ++u) {
+    //FIXME 1...n??? 应该只跟当前这个函数有关系。
     int u1 = cor[u];
     for (edge*p = G[u]; p; p = p->next) {
 
@@ -95,16 +96,17 @@ static inline void do_tarjan(int _n)
 
 }
 
-/// \brief 拓扑排序并调用强连通分量的处理函数
-static inline void topo_sort()
+/// \brief 拓扑排序，输出到data中。
+static inline void topo_sort(int* data)
 {
   static int queue[maxn]; int qh(0), qt(0);
   for (int i = 1; i <= n1; ++i) {
+    //FIXME 这个初始化不行！我每个函数要调用一次的
     if (in_deg[i] == 0) queue[qt++] = i;
   }
   while (qh < qt) {
     int o = queue[qh++];
-    //TODO 这里不能调用do_scc，而应该输出顺序供以后使用
+    *data++ = o;
     for (edge* p = G_topo[o]; p; p = p->next) {
       if (--in_deg[p->v] == 0)
         queue[qt++] = p->v;

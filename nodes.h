@@ -12,6 +12,7 @@
 #include <cmath>
 
 using namespace std;
+
 //所有的运算都是二元运算！
 //op节点内部是不是有状态的？
 //你怎么设计？是运算和状态分开？还是合到一起？
@@ -22,19 +23,28 @@ using namespace std;
 struct binary_op {
   int id; //在图中有一个节点号
   interval output;
-  interval *input1, *input2;
-  binary_op(int _id) : id(_id), output(), input1(nullptr), input2(nullptr){}
+  const interval *input[2];
+
+  binary_op() : id(++n), output(), input{nullptr, nullptr} {}
+
+  binary_op(const binary_op &) = delete;
+
+  binary_op &operator=(const binary_op &) = delete;
+
   void eval()
   {
-    output = (*this)(*input1, *input2);
+    output = (*this)(*input[0], *input[1]);
   }
+
 protected:
   virtual interval operator()(const interval &a, const interval &b) = 0;
 };
 
 
+
 struct add : binary_op {
-  add(int _id) : binary_op(_id) {}
+  add() : binary_op() {}
+
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
@@ -43,80 +53,101 @@ struct add : binary_op {
 };
 
 struct sub : binary_op {
-  sub(int _id) : binary_op(_id) {}
+  sub() : binary_op() {}
+
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
     return interval(a.L - b.L, a.R - b.R);
   }
 };
+
 struct mul : binary_op {
-  mul(int _id) : binary_op(_id) {}
+  mul() : binary_op() {}
+
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
-    double t[4] = { a.L * b.L, a.R * b.R, a.L * b.R, a.R * b.L };
+    double t[4] = {a.L * b.L, a.R * b.R, a.L * b.R, a.R * b.L};
     sort(t, t + 4);
     return interval(t[0], t[3]);
   }
 };
+
 struct div : binary_op {
-  div(int _id) : binary_op(_id) {}
+  div() : binary_op() {}
+
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
     if (b.L <= 0 && b.R >= 0) {
       return interval(-INFINITY, INFINITY);
     }
-    double t[4] = { a.L / b.L, a.R / b.R, a.L / b.R, a.R / b.L };
+    double t[4] = {a.L / b.L, a.R / b.R, a.L / b.R, a.R / b.L};
     sort(t, t + 4);
     return interval(t[0], t[3]);
   }
 };
 
 struct phi : binary_op {
-  phi(int _id) : binary_op(_id) {}
-  interval operator()(const interval& a, const interval& b)
+  phi() : binary_op() {}
+
+  interval operator()(const interval &a, const interval &b)
   {
     return interval{min(a.L, b.L), max(a.R, b.R)};
   }
 };
 
-struct less : binary_op {
+struct _less : binary_op {
   bool enabled, strict_int;
-  less(int _id, bool _strict_int) : binary_op(_id), enabled(true), strict_int(_strict_int) {}
+
+  _less(bool _strict_int)
+      : binary_op(), enabled(true), strict_int(_strict_int) {}
 
   void enable(bool enable) { enabled = enable; }
+
   interval operator()(const interval &obj, const interval &ref) override
   {
-    if (!enabled) return obj;
-    return interval(obj.L, min(obj.R, ref.R - (double)strict_int));
+    if (!enabled) { return obj; }
+    return interval(obj.L, min(obj.R, ref.R - (double) strict_int));
   }
 };
-struct greater : binary_op {
+
+struct _greater : binary_op {
   bool enabled, strict_int;
-  greater(int _id, bool _strict_int) : binary_op(_id), enabled(true), strict_int(_strict_int) {}
+
+  _greater(bool _strict_int)
+      : binary_op(), enabled(true), strict_int(_strict_int) {}
+
   void enable(bool enable) { enabled = enable; }
+
   interval operator()(const interval &obj, const interval &ref) override
   {
-    if (!enabled) return obj;
-    return interval(max(obj.L, ref.L + (double)strict_int), obj.R);
+    if (!enabled) { return obj; }
+    return interval(max(obj.L, ref.L + (double) strict_int), obj.R);
   }
 };
 //一元运算只有转型，其他的用加常数节点来实现。
 
 struct castint : binary_op {
-  castint(int _id) : binary_op(_id) {}
-  interval operator()(const interval &x, const interval&) override
+  castint() : binary_op() {}
+  interval operator()(const interval &x, const interval &) override
   {
-    return interval{(double) (int) x.L, (double) (int) x.R};
+#define CAST(x) ( isfinite(x) ? (double)(int)(x) : (x))
+    return interval{ CAST(x.L), CAST(x.R) };
   }
 };
+#if 0
+//FIXME 你不能直接new一个interval吗? 可以的
 struct initial : binary_op {
   interval constant;
-  initial(int _id, interval c) : binary_op(_id), constant(c) {}
-  interval operator()(const interval&, const interval&) override { return constant; }
+
+  initial(interval c) : binary_op(), constant(c) {}
+
+  interval
+  operator()(const interval &, const interval &) override { return constant; }
 };
-// * 那么phi应该提供查询是否是未定值的方法、区间交应该可以有状态设为是否disabled
+#endif
 
 
+#endif

@@ -2,7 +2,7 @@
 // Created by prwang on 7/2/2018.
 //
 
-#include "eval.h"
+#include "SDT.h"
 
 /*
  * future是什么东西？
@@ -37,23 +37,37 @@
 
 
 /// \brief 三步法处理强连通分量
-static inline void do_scc(int scc_id)
+static inline void do_scc(int scc_id, int ts)
 {
+/// \brief 懒惰清空原来的输入
+#define get_output(id) (time[id] == ts ? id2node[id]->output \
+: (id2node[id]->output = interval()))
+
+  //TODO step 0: 哪些是future？以未定值的phi为开始，染色所有节点
+// * 那么phi应该提供查询是否是未定值的方法、区间交应该可以有状态设为是否disabled
+  //难道不是所有的东西都是未定值的吗？
+
+
+
+
   //FIXME 小心！spfa会爆队列！
   //你用标准的队列吧
-  static int queue[maxn]; int qh(0), qt(0);
+  //小心！这个函数会重入
+  #error static int queue[maxn];
+  int qh(0), qt(0);
   bool in_queue[maxn];
-  //TODO step 0: 哪些是future？以未定值的phi为开始，染色所有节点
 
   //TODO widening: spfa
-  CLR(in_queue); qh = qt = 0;
+  CLR(in_queue);
+  qh = qt = 0;
   /*比如一个节点的强连通分量中，显然可以是任何节点
    *你怎么建立抽象的图和具体的
    */
   for (int u : scc_cont[scc_id]) {
     //FIXME ??? 要入队所有有值的变量！ if(...)
-    if (false)
+    if (false) {
       in_queue[queue[qt++] = u] = true;
+    }
   }
   while (qh < qt) {
     //TODO case type of
@@ -70,3 +84,12 @@ static inline void do_scc(int scc_id)
   //TODO step 3 narrowing
 }
 
+interval func::eval(const vector<interval> &real_args)
+{
+
+  assert(real_args.size() == args.size());
+  copy(real_args.begin(), real_args.end(), args.begin());
+  ++timestamp;
+  for (int i : order) { do_scc(i, timestamp); }
+  return *ret;
+}

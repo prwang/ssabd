@@ -2,6 +2,11 @@
 // Created by prwang on 6/30/2018.
 #include <unordered_map>
 #include "SDT.h"
+#include "scc.h"
+
+func *current_func;
+unordered_map<string, func *> func_table;
+string current_bb;
 
 //(bb1, var) -> var_t  (bb2, var) -> var_f
 /*
@@ -13,29 +18,25 @@
 
 
  */
-void function_postfix()
+void func::postfix()
 {
   /* 每解析一个函数，就调用一次。那么就不需要搞很多env了
    * 并且这里给parse_postfix 留出余地。
-   *1. 点已经建好了，现在需要连边，
-   *基本的情况：同一变量的定义连到使用
-   *附加的情况：考虑条件跳转的影响，在边上插入区间交 节点。
-   * 一个定义，多个使用
-   *所以需要枚举所有的使用(有一点二度点也没关系）。
-   *  1.  函数内的使用，从每个点出发，看看它的入边
-   *  2.  查redirection里面如果有，那连到redirection，否则连到自己
-   *  3. 那么我需要知道，这个语句属于哪个基本块
-   *  4. 这些用不着继承属性，直接存取全局变量就可以
-   *  不如说它是一个redirection表，给一个自己在哪个块，我要哪个变量，则
-   *  输出 1) 不存在，则可以安全地直接连过去 2)
-   *
-   *  如果函数调用不解析的话，那么图是不连通的。最后做强连通分量、缩点的时候应该
-   *  边是什么意思？从定义指向使用。
-   *  这个也不对，我拓扑排序排出来应该是每一个函数的求值顺序，那么应该从函数的参数开始
-   *
-   *
    */
+  //连边
+  for (const IBR &i : interblock_refs) {
+    auto t = redirection.find(make_pair(i.bb, i.var));
+    auto N = nodes.find(t == redirection.end() ? i.var : t->second);
+    assert(N != nodes.end());
+    i.node->input[i.which] = &N->second->output;
+    add_edge(N->second->id, i.node->id);
+  }
+
+  //TODO 想出怎么对着一个函数求强连通分量和拓扑排序
+  //你要从supernode这里开始拓扑排序，则断言，只有这个点的起始入度是0
+  //没有问题
 }
+
 /*
  * 我需要根据函数名字，查到它的哪些变量是使用了参数，然后去patch这些地方。
  * 一个函数被调用多次，我还是得复制它，调用了多少遍，就需要复制多少遍
@@ -46,9 +47,37 @@ void function_postfix()
  * 每次eval一个节点的时候需要读这个output.
  * output可以放在节点里面啊。没有递归那么
  *
- *
- *
  */
+void func::do_rval(RVAL rv, binary_op *op, bool which)
+{
+  if (rv.isvar) {
+    switch (rv.r.type) {
+    case NORM: {
+      auto it = nodes.find(rv.r.var);
+      assert(it != nodes.end());
+      op->input[which] = &it->second->output;
+      add_edge(it->second->id, op->id);
+      break;
+    }
+    case EXT:
+      op->input[which] = nullptr;
+      interblock_refs.push_back(IBR{rv.r.var, current_bb, op, which});
+      break;
+    case ARG: {
+      auto it = name2arg.find(del_ver(rv.r.var));
+      assert(it != name2arg.end());
+      op->input[which] = it->second;
+      add_edge(supernode_id, op->id);
+      break;
+    }
+    default:
+      assert(false);
+    }
+  } else {
+    op->input[which] = new interval(rv.C, rv.C);
+  }
+}
+
 void parse_postfix()
 {
 
