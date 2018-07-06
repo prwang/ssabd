@@ -3,8 +3,20 @@
 //
 
 #include "SDT.h"
+#include "nodes.h"
+#include <queue>
 
 /*
+/*
+ * 我需要根据函数名字，查到它的哪些变量是使用了参数，然后去patch这些地方。
+ * 一个函数被调用多次，我还是得复制它，调用了多少遍，就需要复制多少遍
+ * 显然，我们应该以函数为单位进行解析，那么scc就不能用全局变量了，不一定
+ * scc是静态的信息，当然可以逐个函数都做完
+ * 缩点拓扑排序都可以静态做，最后输出一个求值顺序
+ * 什么是动态信息？那就是每个节点的output.
+ * 每次eval一个节点的时候需要读这个output.
+ * output可以放在节点里面啊。没有递归那么
+ * --
  * future是什么东西？
  * 是未解析的条件跳转。
  * 你phi节点的规则， 没有齐备则
@@ -22,9 +34,15 @@
  *
  * 一个变量是未定值的，要么就是一个不完整的phi，要么依赖一个未定值的变量。
  * 所有未定值变量的特点是，它们的实际范围可能更大，所以用它做条件变量的区间交结果会错
+ *
  * 那么就要临时disable它们，直到，widen和future resolution之后，这些变量的值才有意义，
  * 才能用它们做区间交。
  * 那么phi应该提供查询是否是未定值的方法、区间交应该可以有状态设为是否disabled
+ *
+ * 一个比较节点(obj, ref) 如果obj不存在，结果为空；如果ref不存在，在第一步
+ * 结果是obj！
+ *
+ * 读论文，结果是，这两种边叫做data dep和ctrl dep，在图中都要连出来
  *
  * 确定变量是未定值的，时机是什么？
  * 首先必须在do_scc里面，这样能准备好的都准备好了。
@@ -32,6 +50,7 @@
  * 只有两种状态，可以从所有未定值的phi节点开始bfs，遇到
  *  运算节点和phi节点和区间交的obj，则运算结果是未定值的
  *  区间交的ref，则把这个区间交disable掉，并且对输出没有影响。
+ *
  *
  */
 
@@ -45,28 +64,25 @@ static inline void do_scc(int scc_id, int ts)
 
   //TODO step 0: 哪些是future？以未定值的phi为开始，染色所有节点
 // * 那么phi应该提供查询是否是未定值的方法、区间交应该可以有状态设为是否disabled
-  //难道不是所有的东西都是未定值的吗？
-
-
+  //不是所有的东西都是未定值的。如果ref是外围的，obj是内的，那直接可以定出来
 
 
   //FIXME 小心！spfa会爆队列！
   //你用标准的队列吧
   //小心！这个函数会重入
-  #error static int queue[maxn];
-  int qh(0), qt(0);
-  bool in_queue[maxn];
+  queue<int> Q;
+  bool in_queue[maxn];//FIXME 只用开scc那么大？!
 
   //TODO widening: spfa
   CLR(in_queue);
-  qh = qt = 0;
   /*比如一个节点的强连通分量中，显然可以是任何节点
    *你怎么建立抽象的图和具体的
    */
   for (int u : scc_cont[scc_id]) {
-    //FIXME ??? 要入队所有有值的变量！ if(...)
-    if (false) {
-      in_queue[queue[qt++] = u] = true;
+    OP* node = id2node[u];
+    assert(node); node->eval(); //根据求值出来是否为空，判断是否所有操作数准备好
+    if (!node->output.is_empty()) {
+      Q.push(u);
     }
   }
   while (qh < qt) {

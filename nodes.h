@@ -16,7 +16,8 @@ using namespace std;
 struct OP {
   int id;
   interval output;
-  OP() : id(++n), output() {}
+  OP() : id(++n), output() { id2node[id] = this; }
+  ~OP() { id2node[id] = nullptr; }
   OP(const OP &) = delete;
   OP &operator=(const OP &) = delete;
   virtual void eval() = 0;
@@ -84,6 +85,8 @@ struct _div : binary_op {
 };
 
 
+//就用double！
+// int型的< >的问题在翻译的时候就地解决
 struct _less : binary_op {
   bool enabled, strict_int;
 
@@ -152,8 +155,9 @@ struct phi : generic_func_call {
 };
 
 struct func_call : generic_func_call {
-  func_call(int ary) : generic_func_call(ary) {}
   string func_name;
+  func_call(int ary, const string& _func_name)
+      : generic_func_call(ary), func_name(_func_name) {}
   vector<const interval*> input;
   void eval() override;
 };

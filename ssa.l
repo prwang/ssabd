@@ -1,6 +1,6 @@
 %{
 #include "SDT.h"
-#include "ssa.tab.h"
+#include "parser.hh"
 #define STR yylval.slv = string(yytext)
 %}
 %x phi comment
@@ -9,10 +9,10 @@
 ndg [_A-Za-z]
 dg [0-9]
 blank ([ \f\r\t\v]+)
-label <({dg}|{ndg})+({blank}{dg}+)?>
 
 const [-+]?({dg}+|{dg}*.{dg}+)([eE][-+]?[0-9]+)?
-id {ndg}*_dg
+id_ign {ndg}+[.]{dg}+
+id ({ndg}|{dg})*_({dg}+)?
 id_ext \({dg}+|D\)
 %%
 ";;"          { BEGIN comment; }
@@ -21,14 +21,19 @@ id_ext \({dg}+|D\)
 
 <phi>"\n"     { BEGIN INITIAL; }
 <phi>=        return ASN;
-<phi>{id}     { STR; return ID; }
+<phi>{id}     { STR; return PHIID; }
 <phi>PHI      return PHI;
 <phi>{blank}+ ;
 <phi><        return PHILT;
 <phi>>        return PHIGT;
 <phi>","      return CMA;
 
-{label}       { STR; return LABEL; }
+{id}          { STR; return ID; }
+{id_ext}      { STR; return IDEXT; }
+[><]=?|[=!]=  { STR; return RELOP; }
+[-+*/]        { STR;  return ARIOP; }
+"<bb "{dg}+">"  { STR; return LABEL; }
+"<L"{dg}+">"      { return RLABEL; }
 const         { sscanf(yytext, "%lf", &yylval.clv); return CONST; }
 "("           return LP;
 ")"           return RP;
@@ -40,11 +45,9 @@ const         { sscanf(yytext, "%lf", &yylval.clv); return CONST; }
 if            return IF;
 goto          return GOTO;
 return        return RETURN;
+int           return INT;
+float         return FLOAT;
 =             return ASN;
-{id}          { STR; return ID; }
-{id_ext}      { STR; return IDEXT; }
-[><]=?|[=!]=  { STR; return RELOP; }
-[-+*/]        { STR;  return ARIOP; }
 
 . { yyerror(((string)"unexpected token" + (string) yytext ).c_str()); }
 

@@ -15,14 +15,14 @@
 
 #define LOGM(...) fprintf(stderr, __VA_ARGS__)
 #define CLR(x) memset(x, 0, sizeof(x));
-constexpr int maxn = 500362;
-extern int timestamp;
+constexpr int maxn = 500362; // TODO 全部改对之后改成动态分配的
 using namespace std;
 
+extern int timestamp,  /// \brief 求值时间戳（用于重置)
+    n, n_scc;  /// \brief 最后一个节点、强连通分量编号
 
-
-extern int n; /// \brief 节点个数。有多少个语句就有多少个节点，翻译时创建
-extern struct binary_op *id2node[maxn]; /// \brief 提供节点号到实际node的转换
-constexpr struct binary_op* func_null = &((struct binary_op* )nullptr)[-1];
+extern unordered_map<string, struct func*> map_func_name;
+extern struct OP *id2node[maxn];
+extern vector<int> scc_cont[maxn]; /// \brief 每个强连通分量里面包含哪些点
 
 #endif //PROJECT_COMMON_H

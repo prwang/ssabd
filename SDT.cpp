@@ -7,76 +7,70 @@
 func *current_func;
 unordered_map<string, func *> func_table;
 string current_bb;
+struct OP *id2node[maxn];
+unordered_map<string, struct func *> map_func_name;
 
-//(bb1, var) -> var_t  (bb2, var) -> var_f
-/*
- 读入控制流图，最终play with数据流图*
- 哪些节点是翻译生成的，哪些节点是postfix生成的？
- 最开始预想的不变式是所有的节点都翻译生成。
- 第一个例外是块外引用条件的变量，要加上区间的限制
- 第二个例外是整数类型的小于语义，实际上是a <= b - 1
+interval EMPTY[maxn],
+    *const_pool = EMPTY + 1; //顾名思义，数组首地址为空区间指针
 
 
- */
 void func::postfix()
 {
-  /* 每解析一个函数，就调用一次。那么就不需要搞很多env了
-   * 并且这里给parse_postfix 留出余地。
-   */
+  if (this->bad) { return delete this; }
+
   //连边
   for (const IBR &i : interblock_refs) {
     auto t = redirection.find(make_pair(i.bb, i.var));
-    auto N = nodes.find(t == redirection.end() ? i.var : t->second);
+    const string &key = (t == redirection.end() ? i.var : t->second);
+    auto N = nodes.find(key);
     assert(N != nodes.end());
-    i.node->input[i.which] = &N->second->output;
-    add_edge(N->second->id, i.node->id);
+    OP *node = N->second;
+    i.node->set_input(&node->output, i.which);
+    add_edge(node->id, i.node->id);
   }
-
-  //TODO 想出怎么对着一个函数求强连通分量和拓扑排序
-  //你要从supernode这里开始拓扑排序，则断言，只有这个点的起始入度是0
-  //没有问题
+  //缩点拓扑排序
+  do_topo();
 }
 
-/*
- * 我需要根据函数名字，查到它的哪些变量是使用了参数，然后去patch这些地方。
- * 一个函数被调用多次，我还是得复制它，调用了多少遍，就需要复制多少遍
- * 显然，我们应该以函数为单位进行解析，那么scc就不能用全局变量了，不一定
- * scc是静态的信息，当然可以逐个函数都做完
- * 缩点拓扑排序都可以静态做，最后输出一个求值顺序
- * 什么是动态信息？那就是每个节点的output.
- * 每次eval一个节点的时候需要读这个output.
- * output可以放在节点里面啊。没有递归那么
- *
- */
-void func::do_rval(RVAL rv, binary_op *op, bool which)
+void func::do_rval(const RVAL &rv, OP *op, int which)
 {
   if (rv.isvar) {
     switch (rv.r.type) {
     case NORM: {
       auto it = nodes.find(rv.r.var);
       assert(it != nodes.end());
-      op->input[which] = &it->second->output;
+      op->set_input(&it->second->output, which);
       add_edge(it->second->id, op->id);
       break;
     }
     case EXT:
-      op->input[which] = nullptr;
+      op->set_input(nullptr, which);
       interblock_refs.push_back(IBR{rv.r.var, current_bb, op, which});
       break;
     case ARG: {
-      auto it = name2arg.find(del_ver(rv.r.var));
+      auto it = name2arg.find(del_version(rv.r.var));
       assert(it != name2arg.end());
-      op->input[which] = it->second;
-      add_edge(supernode_id, op->id);
+      op->set_input(it->second, which);
+      add_edge(first_node, op->id);
       break;
     }
     default:
       assert(false);
     }
   } else {
-    op->input[which] = new interval(rv.C, rv.C);
+    op->set_input(new(const_pool++) interval(rv.C, rv.C), which);
   }
 }
+
+void func_call::eval()
+{
+  func *f = map_func_name[func_name];
+  vector<interval> value;
+  for (auto i : input) { value.push_back(*i); }
+  f->eval(value);
+  output = *f->ret;
+}
+
 
 void parse_postfix()
 {
