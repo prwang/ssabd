@@ -13,14 +13,15 @@
 #include <cstring>
 
 
-#define LOGM(...) fprintf(stderr, __VA_ARGS__)
+extern bool verbose;
+#define LOGM(...) if(verbose)fprintf(stderr, __VA_ARGS__)
 #define CLR(x) memset(x, 0, sizeof(x));
 constexpr int maxn = 500362; // TODO 全部改对之后改成动态分配的
 using namespace std;
 
-extern int timestamp,  /// \brief 求值时间戳（用于重置)
-    n, n_scc;  /// \brief 最后一个节点、强连通分量编号
+extern int n, n_scc;  /// \brief 最后一个节点、强连通分量编号
 
+extern bool allow_same_scc;
 extern unordered_map<string, struct func*> map_func_name;
 extern struct OP *id2node[maxn];
 extern vector<int> scc_cont[maxn]; /// \brief 每个强连通分量里面包含哪些点

@@ -28,7 +28,7 @@ void func::postfix()
     i.node->set_input(&node->output, i.which);
     add_edge(node->id, i.node->id);
   }
-  //缩点拓扑排序
+  //缩点拓扑排序，并设置比较的from_same_scc
   do_topo();
 }
 
@@ -62,20 +62,17 @@ void func::do_rval(const RVAL &rv, OP *op, int which)
   }
 }
 
-void func_call::eval()
+bool func_call::eval()
 {
+  old_output = output;
   func *f = map_func_name[func_name];
   vector<interval> value;
   for (auto i : input) { value.push_back(*i); }
   f->eval(value);
   output = *f->ret;
+  return old_output == output;
 }
 
-
-void parse_postfix()
-{
-
-}
 
 //
 

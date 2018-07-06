@@ -19,6 +19,7 @@ struct interval {
   };
   //空区间
   constexpr interval() : L(INFINITY), R(-INFINITY) { }
+  bool operator==(const interval& other) { return L == other.L && R == other.R; }
   bool is_empty() const { return L > R; }
 private:
 };

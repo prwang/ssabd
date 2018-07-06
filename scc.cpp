@@ -1,96 +1,82 @@
-//
-// Created by prwang on 6/30/2018.
-//
-
-/// \brief Algorithms dealing with strong connected components
+/// \brief 求强连通分量并缩点
 #include <memory>
 #include <utility>
 #include <cstring>
 #include <vector>
 #include <queue>
-
-using namespace std;
+#include <stack>
 #include "scc.h"
 #include "SDT.h"
 #include "interval.h"
 #include "nodes.h"
+using namespace std;
 
-struct edge {
-  bool is_cut; int v;
-  edge* next;
-} *G[maxn], *G_topo[maxn],
+edge  *G[maxn], *G_topo[maxn],
     pool[maxn * 10], *pool_end = pool;
-//变量：正向边在这里，反向边是input[]
-//常量：只有input，没有边
 
-int n_scc;
-static int
-    stack[maxn], sc, ts, //tarjan栈、时间戳
-    dfn[maxn], low[maxn], //深度标记
-    cor[maxn], in_deg[maxn]; //对应等价类，等价类个数、等价类入度
+int n, n_scc; //节点、scc个数
+static int id2scc[maxn], in_deg[maxn]; //对应等价类，scc入度
 vector<int> scc_cont[maxn];
-static bool in_stack[maxn];
-
 
 inline void add_edge3(int u, int v, edge** G1)
 {
   G1[u] = new(pool_end++) edge{false, v, G1[u]};
 }
-void clear()
-{
-  pool_end = pool; ts = sc = n_scc = n = 0;
-  CLR(G); CLR(G_topo); CLR(in_deg);
-  CLR(stack); CLR(dfn); CLR(low); CLR(cor); CLR(in_stack);
-}
-void add_edge(int u, int v) { add_edge3(u, v, G); }
 
+void add_edge(int u, int v) { add_edge3(u, v, G); }
 /// \brief 求强连通分量
-static void tarjan(int u, int fr)
+static void tarjan(int u)
 {
+  static int ts, //dfn编号
+      dfn[maxn], low[maxn]; //深度标记
+  static stack<int> S; //tarjan栈
   dfn[u] = low[u] = ++ts;
-  in_stack[stack[sc++] = u] = true;
+  S.push(u);
   for (edge* p = G[u]; p; p = p->next) {
     int v = p->v;
-    if (dfn[v] == -1) {
-      tarjan(v, u);
+    if (!dfn[v]) {
+      tarjan(v);
       low[u] = min(low[u], low[v]);
       if (dfn[u] < low[v]) {
         p->is_cut = true;
       }
-      else if (in_stack[v]) {
-        low[u] = min(low[u], dfn[v]);
-      }
+    } else if (!id2scc[v]) {
+      low[u] = min(low[u], dfn[v]);
     }
   }
-
   if (low[u] == dfn[u]) {
     int w;
     vector<int>& cur = scc_cont[++n_scc];
     cur.clear();
     do {
-      in_stack[w = stack[--sc]] = false;
-      cor[w] = n_scc;
+      w = S.top(); S.pop();
+      id2scc[w] = n_scc;
       cur.push_back(w);
     } while (u != w);
   }
 }
 
-
 /// \brief 强连通分量缩点并拓扑排序
 void func::do_topo()
 {
   //求强连通分量
-  tarjan(first_node, 0);
+  tarjan(first_node);
   //缩点建新图
   last_node = n;
   for (int u = first_node; u <= last_node; ++u) {
-    int u1 = cor[u];
+    int u1 = id2scc[u];
     for (edge*p = G[u]; p; p = p->next) {
-
       if (p->is_cut) {
-        int v1 = cor[p->v];
-        add_edge3(cor[u], v1, G_topo);
+        int v1 = id2scc[p->v];
+        add_edge3(id2scc[u], v1, G_topo);
         ++in_deg[v1];
+      } else {
+        //位于同一强连通分量的边，如果是连到了一个比较算符的ref，
+        // 则在widen阶段不能进行比较操作（认为利用了future）
+        compare* n2 = dynamic_cast<compare*>(id2node[p->v]);
+        if (n2 && n2->input[1] == &id2node[u]->output) {
+          n2->ref_from_same_scc = true;
+        }
       }
     }
   }

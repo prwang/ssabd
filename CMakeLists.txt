@@ -9,8 +9,8 @@ bison_target(ssaParse ssa.y ${CMAKE_CURRENT_BINARY_DIR}/parser.cc
         VERBOSE ${CMAKE_CURRENT_BINARY_DIR}/parser.log)
 
 add_executable(main main.cpp scc.cpp
-        ${FLEX_ssaScan_OUTPUTS}
+        common.h SDT.h SDT.cpp nodes.h interval.h scc.h main.h eval.cpp eval.h
         ${BISON_ssaParse_OUTPUTS}
-        common.h SDT.h SDT.cpp nodes.h interval.h scc.h main.h eval.cpp eval.h)
+        ${FLEX_ssaScan_OUTPUTS} )
 
 target_include_directories(main PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

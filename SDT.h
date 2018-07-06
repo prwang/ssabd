@@ -33,12 +33,9 @@ using namespace std;
 enum rid_type {
   NORM, EXT, ARG
 };
-enum var_type {
-  INT, FLOAT,
-};
 struct VARDEF {
   string var;
-  var_type type;
+  bool is_def_int;
 };
 struct RID {
   string var;
@@ -46,10 +43,8 @@ struct RID {
 };
 struct RVAL {
   bool isvar;
-  union {
-    double C;
-    RID r;
-  };
+  double C;
+  RID r;
 };
 
 inline string del_version(string s)
@@ -59,9 +54,18 @@ inline string del_version(string s)
   else { return s.substr(0, k); }
 }
 
-struct DEF {
+struct __yystype {
+  double clv;
+  bool is_def_int;
+  vector<VARDEF> *defL_C;
+  vector<RVAL> *rval_list;
+  RID rid;
+  RVAL rval;
+  VARDEF def;
+  string slv;
 
 };
+#define YYSTYPE struct __yystype
 /// \brief inter-block reference
 struct IBR {
   string var;
@@ -110,14 +114,9 @@ struct func {
     }
   }
 
-  vector<IBR> interblock_refs; /// \brief 跨块引用，最后解析
-  unordered_map<string, interval *> name2arg; ///\brief 参数名到参数值
-  vector<interval> args; ///\brief 参数值存储位置
-  unordered_map<string, OP *> nodes; /// \brief 变量定义表
-  unordered_map<string, var_type> types; ///\brief 变量类型表
   bool is_var_int(const string &varname)
   {
-    return types[del_version(varname)] == INT;
+    return is_def_int[del_version(varname)];
   }
 
   interval *ret; /// \brief 返回值变量位置
@@ -130,7 +129,7 @@ struct func {
 
   void postfix();
 
-  void add_var_def(const VARDEF &x) { types[x.var] = x.type; }
+  void add_var_def(const VARDEF &x) { is_def_int[x.var] = x.is_def_int; }
 
   interval eval(const vector<interval> &);
 
@@ -155,76 +154,77 @@ struct func {
     nodes[name] = op;
   }
 
-  void add_rel(const string &op,
-                const string &bb_t, const string &bb_f,
-                const RVAL &l, const RVAL &r)
-  { _add_rel(op, &bb_t, &bb_f, &l, &r);}
-  void _add_rel(const string &op,
-               const string *bb_t, const string *bb_f,
-               const RVAL *l, const RVAL *r)
+  void add_return(const string &name)
   {
-    //基本情况 a<b a==b
-    //两种交换：交换lr，交换tf
-    const char *s = op.c_str();
+    auto it = nodes.find(name);
+    assert(it != nodes.end());
+    ret = &it->second->output;
+  }
+
+  void add_rel(const string &op,
+               const string &bb_t, const string &bb_f,
+               const RVAL &l, const RVAL &r)
+  {
+    _add_rel(op, &bb_t, &bb_f, &l, &r);
+  }
+
+  void _add_rel(const string &op,
+                const string *bb_t, const string *bb_f,
+                const RVAL *l, const RVAL *r)
+  {
+    assert(l->isvar || r->isvar); //至少有一个是变量才有意义
+
+
+    // 基本情况 a<b a==b两种交换：交换左右，交换真假
     bool swlr(false), swtf(false);
-    //(bb1, var) -> var_t  (bb2, var) -> var_f
+
+#define F(cp, cat, bb, obj, ref) \
+do { \
+  OP *op = (cp); \
+  string name1 = (obj)->r.var + (cat); \
+  nodes[name1] = op; \
+  do_rval(*(obj), op, 0); \
+  do_rval(*(ref), op, 1); \
+  redirection[make_pair(*(bb), (obj)->r.var)] = name1; \
+} while (false);
+
+    const char *s = op.c_str();
     if (s[2] == '\0' && s[1] == '=') {
       switch (s[0]) {
-      case '<':
-        swlr = swtf = true;
-        goto LESS;
-      case '>':
-        swlr = true;
-        goto LESS;
-      case '!':
-        swtf = true; //fall through
+      case '<': swlr = swtf = true; goto LESS;
+      case '>': swtf = true; goto LESS;
+      case '!': swtf = true; //fall through
       case '=':
         if (swtf) { swap(bb_t, bb_f); }
-        if (!l->isvar) { swap(l, r); }
-        assert(l->isvar);
+        if (l->isvar) {
+          F(new _equal, ";true", bb_t, l, r);
+        }
         if (r->isvar) {
-          //TODO v == v 4个
-        } else {
-          // TODO c == v 两个
+          F(new _equal, ";true", bb_t, l, r);
         }
         return;
-
-      default:
-        assert(false);
+      default: assert(false);
       }
     } else if (s[1] == '\0') {
       switch (s[0]) {
-      case '>':
-        swtf = true; //fall through
-      case '<':
-      LESS:
+      case '>': swlr = true; //fall through
+LESS: case '<':
         if (swtf) { swap(bb_t, bb_f); }
         if (swlr) { swap(l, r); }
-#define GETTYPE
-
-//注意要查两遍???，因为gcc的temporary没有名字带下划线
-        //一个玩意是temporary当且仅当下划线加数字的形式
-        //所以直接del就可以了
-#define is_const_int(C) (int(C) == (C))
-        if (l->isvar && r->isvar) {
-          //TODO  v < v 两个
-        } else if (l->isvar) {
+#define is_int(R) ((R).isvar ? is_var_int((R).r.var) : int((R).C) == (R).C)
+        if (l->isvar) {
           bool I = is_var_int(l->r.var);
-          if (I) { assert(is_const_int(r->C)); }
-          //TODO  v < c 一个
-          //用字符串就得不重名。搞一个特殊字符
-          OP *lt = new _less(I), *ge = new _greater(false);
-          nodes[l->r.var + ";true"] = lt;
-          string tr = l->r.var + ";true";
-          lt->set_input(new interval(r->C, r->C), 1);
-
-        } else if (r->isvar) {
+          if (I) { assert(is_int(*r)); }
+          F(new _less(I), ";true", bb_t, l, r) ;
+          F(new _greater(false), ";false", bb_f, l, r) ;
+        }
+        if (r->isvar) {
           bool I = is_var_int(r->r.var);
-          if (I) { assert(is_const_int(l->C)); }
-
-          //TODO c < v 一个
-        } else { assert(false); }
-
+          if (I) { assert(is_int(*l)); }
+          F(new _greater(I), ";true", bb_t, r, l) ;
+          F(new _less(false), ";false", bb_f, r, l) ;
+        }
+        return;
       default:
         assert(false);
       }
@@ -240,6 +240,11 @@ struct func {
   }
 
 private:
+  vector<IBR> interblock_refs; /// \brief 跨块引用，最后解析
+  unordered_map<string, interval *> name2arg; ///\brief 参数名到参数值
+  vector<interval> args; ///\brief 参数值存储位置
+  unordered_map<string, OP *> nodes; /// \brief 变量定义表
+  unordered_map<string, bool> is_def_int; ///\brief 变量类型表
   static binary_op *make_ari_node(const string &op)
   {
     const char *s = op.c_str();
@@ -270,9 +275,8 @@ enum RELOP {
 };
 
 
-extern void yyparse();
+extern int yyparse(void);
 
-void parse_postfix();
 
 #endif //SSABD_SDT_H
 

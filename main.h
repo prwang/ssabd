@@ -8,4 +8,5 @@
 #include "common.h"
 #include "scc.h"
 #include "SDT.h"
+#include <unistd.h>
 #endif //SSABD_MAIN_H

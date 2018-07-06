@@ -1,21 +1,10 @@
 %{
 #include "SDT.h"
-extern "C" void yyerror(const char* s);
-extern "C" int yylex(void);
+void yyerror(const char* s);
+int yylex(void);
 #define R(x, y, z) current_func->do_rval((x), (y), (z));
 %}
 
-%union
-{
-  double clv;
-  string slv;
-  RID rid;
-  RVAL rval;
-  VARDEF def;
-  vector<VARDEF>* defL_C;
-  vector<RVAL>* rval_list;
-  var_type vartype;
-}
 
 %token ELSE
 %token LP
@@ -48,7 +37,7 @@ extern "C" int yylex(void);
 
 %type<defL_C> defL_C
 %type<slv> jump_tar
-%type<vartype> vartype
+%type<is_def_int> is_def_int
 %type<rid> rid
 %type<rval> rval
 %type<def> def
@@ -62,11 +51,11 @@ program : func program
         | ;
 /*return, 就是合并函数return的那个变量，和调用的那个变量*/ 
 /*call, 就是生成复制参数的赋值语句*/
-vartype : INT { $$ = INT; }
-        | FLOAT {$$ = FLOAT; };
-def     : vartype ID { $$ = VARDEF{$2, $1}; };
+is_def_int : INT { $$ = true; }
+        | FLOAT {$$ = false; };
+def     : is_def_int ID { $$ = VARDEF{$2, $1}; };
 defL_C  : defL_C CMA def { ($$ = $1)->push_back($3); $1 = NULL; } 
-        | def { $$ = new vector<VARDEF>; idlist->push_back($1); }; 
+        | def { $$ = new vector<VARDEF>; $$->push_back($1); };
 func    : ID LP defL_C RP LB MFinit defL_S BBlist RB
           { current_func->postfix(); current_func = nullptr; };
 
@@ -76,7 +65,7 @@ MFinit  : {
             for (VARDEF & r : *$<defL_C>-2) {
               V.push_back(r.var);
             }
-            current_func = new func($<ID>-4, V);
+            current_func = new func($<slv>-4, V);
             for (VARDEF & r: *$<defL_C>-2) {
               current_func->add_var_def(r);
             }
@@ -93,13 +82,13 @@ rid     : rid IDEXT {
           }
         | ID { $$.var = $1; $$.type = NORM; };
 
-rval    : rid { $$.isvar = true; $$.rid = $1; }
+rval    : rid { $$.isvar = true; $$.r = $1; }
         | CONST  { $$.isvar = false; $$.C = $1; };
 
 rval_list : rval_list CMA rval 
             { ($$ = $1)->push_back($3); $1= NULL; } 
           | rval 
-            { $$ = new vector<RVAL>; idlist->push_back($1); }; 
+            { $$ = new vector<RVAL>; $$->push_back($1); };
 BBlist  : BBlist BB  | ;
 phi_list: phi_list phi_exp SCOL | ;
 ari_list: ari_list ari_exp SCOL | ari_exp SCOL ;
@@ -108,22 +97,18 @@ jump_tar: LABEL { $$ = $1; }
 LblC    : LABEL COL { current_bb = $1; };
 
 BB      : BBnormal | return | vreturn;
-BBnormal: LblC phi_list ari_list jump; /*FIXME 不能label不能optional，否则和下一个bb连一起了*/
+BBnormal: LblC phi_list ari_list jump;
 
-return  : phi_list RLABEL COL RETURN ID SCOL
-          {
-            auto it = nodes.find($5)
-            assert(id != nodes.end());
-            current_func->ret = &(*it)->output;
-          }
+return  : phi_list RLABEL COL RETURN ID SCOL { current_func->add_return($5); }
 vreturn : LblC phi_list RETURN SCOL { current_func->bad = true; };
 
 
 phi_exp : PHIID ASN PHI PHILT rval_list  PHIGT
           { current_func->add_generic($1, new phi($5->size()), $5); $5 = NULL; }
 ari_exp : ID ASN rval ARIOP rval { current_func->add_ariop($1, $4, $3, $5); }
-        | ID ASN LP vartype RP rval
-          { current_func->add_unary($1, $4 == INT ? new castint() : new cp(), $6); }
+        | ID ASN LP is_def_int RP rval
+          { current_func->add_unary($1, $4 ? (unary_op*)(new castint())
+           : (unary_op*)(new cp()), $6); }
         | ID ASN rval { current_func->add_unary($1, new cp(), $3); }
         | ID ASN ID LP rval_list RP
           { current_func->add_generic($1, new func_call($5->size(), $3), $5); $5 = NULL; }
@@ -137,7 +122,7 @@ jump    : IF LP rval RELOP rval RP GOTO jump_tar SCOL ELSE GOTO jump_tar SCOL
 
 void yyerror(const char *s)
 {
-  printf("Parser ERR: %d: %s\n", yylineno, s);
+  printf("Parser ERR: %s\n", s);
   exit(2);
 }
 

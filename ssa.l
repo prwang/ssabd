@@ -1,6 +1,7 @@
 %{
 #include "SDT.h"
 #include "parser.hh"
+void yyerror(const char *s);
 #define STR yylval.slv = string(yytext)
 %}
 %x phi comment
@@ -49,7 +50,10 @@ int           return INT;
 float         return FLOAT;
 =             return ASN;
 
-. { yyerror(((string)"unexpected token" + (string) yytext ).c_str()); }
+. {
+  printf("%d: unexpected token %s\n", yylineno, yytext);
+  exit(3);
+ }
 
 
 %%

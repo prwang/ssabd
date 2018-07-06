@@ -1,6 +1,5 @@
-//
+/// \brief 所有的区间运算
 // Created by prwang on 6/30/2018.
-//
 
 #ifndef SSABD_NODES_H
 #define SSABD_NODES_H
@@ -15,12 +14,12 @@ using namespace std;
 
 struct OP {
   int id;
-  interval output;
+  interval output, old_output;
   OP() : id(++n), output() { id2node[id] = this; }
   ~OP() { id2node[id] = nullptr; }
   OP(const OP &) = delete;
   OP &operator=(const OP &) = delete;
-  virtual void eval() = 0;
+  virtual bool eval() = 0; //返回求值后有没有改变
   virtual void set_input(const interval* val, int which) = 0;
 };
 struct binary_op:OP {
@@ -31,18 +30,18 @@ struct binary_op:OP {
   }
   binary_op() : input{nullptr, nullptr} {}
 
-  void eval() override
+  bool eval() final override
   {
+    old_output = output;
     output = (*this)(*input[0], *input[1]);
+    return old_output == output;
   }
-
 protected:
   virtual interval operator()(const interval &a, const interval &b) = 0;
 };
 
 
 struct add : binary_op {
-
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
@@ -51,7 +50,6 @@ struct add : binary_op {
 };
 
 struct sub : binary_op {
-
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
@@ -87,51 +85,65 @@ struct _div : binary_op {
 
 //就用double！
 // int型的< >的问题在翻译的时候就地解决
-struct _less : binary_op {
-  bool enabled, strict_int;
-
+//enabled是不是在求scc的时候就能求出来
+//
+struct compare : binary_op {
+  bool ref_from_same_scc;
+  compare() : ref_from_same_scc(false) {}
+};
+struct _less : compare {
+  bool strict_int;
   _less(bool _strict_int)
-      :  enabled(true), strict_int(_strict_int) {}
-
-  void enable(bool enable) { enabled = enable; }
-
+      :  strict_int(_strict_int) { }
   interval operator()(const interval &obj, const interval &ref) override
   {
-    if (!enabled) { return obj; }
+    if (ref_from_same_scc && !allow_same_scc) { return obj; }
     return interval(obj.L, min(obj.R, ref.R - (double) strict_int));
   }
 };
-
-struct _greater : binary_op {
-  bool enabled, strict_int;
-
-  _greater(bool _strict_int)
-      :  enabled(true), strict_int(_strict_int) {}
-
-  void enable(bool enable) { enabled = enable; }
-
+struct _equal : compare {
   interval operator()(const interval &obj, const interval &ref) override
   {
-    if (!enabled) { return obj; }
+    if (ref_from_same_scc && !allow_same_scc) { return obj; }
+    return interval(max(obj.L, ref.L), min(obj.R, ref.R));
+  }
+};
+struct _greater : compare {
+  bool strict_int;
+  _greater(bool _strict_int)
+      : strict_int(_strict_int) {}
+  interval operator()(const interval &obj, const interval &ref) override
+  {
+    if (ref_from_same_scc && !allow_same_scc) { return obj; }
     return interval(max(obj.L, ref.L + (double) strict_int), obj.R);
   }
 };
+
 struct unary_op : OP {
   const interval* input;
   void set_input(const interval* val, int which) override {
     assert(which == 0);
     input = val;
   }
+  bool eval() final override
+  {
+    old_output = output;
+    output = (*this)(*input);
+    return output == old_output;
+  }
+protected:
+  virtual interval operator()(const interval& x) = 0;
 };
 struct castint : unary_op {
-  void eval() override
+  interval operator()(const interval& x) override
   {
 #define CAST(x) ( isfinite(x) ? (double)(int)(x) : (x))
-    output =  interval{CAST(input->L), CAST(input->R)};
+    return interval{CAST(input->L), CAST(input->R)};
   }
 };
 struct cp : unary_op {
-  void eval() override { output = *input; } };
+  interval operator()(const interval& x) override { return *input; }
+};
 struct generic_func_call : OP {
   vector<const interval*> input;
   generic_func_call(int ary) : input(ary) {}
@@ -144,13 +156,26 @@ struct generic_func_call : OP {
 
 struct phi : generic_func_call {
   phi(int ary) : generic_func_call(ary) {}
-  void eval() override
+  bool eval() override
   {
+    old_output = output;
     int s = (int)input.size();
     assert(s >= 2);
     output = *input[0];
     for (int i = 1; i < s; ++i)
       output = Uni(output, *input[i]);
+    return output == old_output;
+  }
+  void grow()
+  {
+    if (!old_output.is_empty()) {
+      if (output.L < old_output.L) {
+        output.L = -INFINITY;
+      }
+      if (output.R > old_output.R) {
+        output.R = INFINITY;
+      }
+    }
   }
 };
 
@@ -159,6 +184,6 @@ struct func_call : generic_func_call {
   func_call(int ary, const string& _func_name)
       : generic_func_call(ary), func_name(_func_name) {}
   vector<const interval*> input;
-  void eval() override;
+  bool eval() override;
 };
 #endif
