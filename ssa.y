@@ -1,4 +1,5 @@
 %{
+#define YYDEBUG 1
 #include "SDT.h"
 void yyerror(const char* s);
 int yylex(void);
@@ -36,6 +37,7 @@ int yylex(void);
 %token<clv> CONST
 
 %type<defL_C> defL_C
+%type<defL_C> defL_CO
 %type<slv> jump_tar
 %type<is_def_int> is_def_int
 %type<rid> rid
@@ -54,9 +56,11 @@ program : func program
 is_def_int : INT { $$ = true; }
         | FLOAT {$$ = false; };
 def     : is_def_int ID { $$ = VARDEF{$2, $1}; };
-defL_C  : defL_C CMA def { ($$ = $1)->push_back($3); $1 = NULL; } 
+
+defL_C  : defL_C CMA def { ($$ = $1)->push_back($3); $1 = NULL; }
         | def { $$ = new vector<VARDEF>; $$->push_back($1); };
-func    : ID LP defL_C RP LB MFinit defL_S BBlist RB
+defL_CO : defL_C { $$ = $1; $1 = NULL; } | { $$ = new vector<VARDEF>; } ;
+func    : ID LP defL_CO RP LB MFinit defL_S BBlist RB
           { current_func->postfix(); current_func = nullptr; };
 
 MFinit  : {
@@ -81,6 +85,7 @@ rid     : rid IDEXT {
             }
           }
         | ID { $$.var = $1; $$.type = NORM; };
+        | PHIID { $$.var = $1; $$.type = NORM; };
 
 rval    : rid { $$.isvar = true; $$.r = $1; }
         | CONST  { $$.isvar = false; $$.C = $1; };
@@ -90,17 +95,20 @@ rval_list : rval_list CMA rval
           | rval 
             { $$ = new vector<RVAL>; $$->push_back($1); };
 BBlist  : BBlist BB  | ;
-phi_list: phi_list phi_exp SCOL | ;
-ari_list: ari_list ari_exp SCOL | ari_exp SCOL ;
+phi_list: phi_list phi_exp | ;
+ari_list: ari_list ari_exp SCOL | ;
 jump_tar: LABEL { $$ = $1; }
         | LABEL LP RLABEL RP { $$ = DEFAULT_RET_BB_NAME; }
-LblC    : LABEL COL { current_bb = $1; };
 
-BB      : BBnormal | return | vreturn;
-BBnormal: LblC phi_list ari_list jump;
+LblC    : LABEL COL { current_func->setbb($1); };
 
-return  : phi_list RLABEL COL RETURN ID SCOL { current_func->add_return($5); }
+BB      : BBjump | BBfall | return | vreturn;
+BBjump  : LblC phi_list ari_list jump { current_func->fall = false; } ;
+BBfall  : LblC phi_list ari_list ari_exp SCOL { current_func->fall = true; };
+
+return  : M1 phi_list RLABEL COL RETURN ID SCOL { current_func->add_return($6); }
 vreturn : LblC phi_list RETURN SCOL { current_func->bad = true; };
+M1      : { current_func->setbb(); };
 
 
 phi_exp : PHIID ASN PHI PHILT rval_list  PHIGT
@@ -117,7 +125,7 @@ ari_exp : ID ASN rval ARIOP rval { current_func->add_ariop($1, $4, $3, $5); }
 /*        1  2  3    4     5    6  7    8        9    10   11   12       13 */
 jump    : IF LP rval RELOP rval RP GOTO jump_tar SCOL ELSE GOTO jump_tar SCOL
          { current_func->add_rel($4, $8, $12, $3, $5); }
-        | GOTO jump_tar SCOL | ; 
+        | GOTO jump_tar SCOL{current_func->set_cfg($2, ""); };
 %%
 
 void yyerror(const char *s)

@@ -13,13 +13,17 @@
 using namespace std;
 
 struct OP {
-  int id;
+  int id; bool is_orphan;
   interval output, old_output;
-  OP() : id(++n), output() { id2node[id] = this; }
-  ~OP() { id2node[id] = nullptr; }
+  OP() : id(++n_op), output() {
+    is_orphan = true;
+    id2node[id] = this;
+  }
+  virtual ~OP() { id2node[id] = nullptr; }
   OP(const OP &) = delete;
+  virtual string viz_attr() { return ""; }
   OP &operator=(const OP &) = delete;
-  virtual bool eval() = 0; //返回求值后有没有改变
+  virtual bool same_after_eval() = 0; //true:求值后结果没有改变
   virtual void set_input(const interval* val, int which) = 0;
 };
 struct binary_op:OP {
@@ -30,7 +34,7 @@ struct binary_op:OP {
   }
   binary_op() : input{nullptr, nullptr} {}
 
-  bool eval() final override
+  bool same_after_eval() final override
   {
     old_output = output;
     output = (*this)(*input[0], *input[1]);
@@ -125,7 +129,7 @@ struct unary_op : OP {
     assert(which == 0);
     input = val;
   }
-  bool eval() final override
+  bool same_after_eval() final override
   {
     old_output = output;
     output = (*this)(*input);
@@ -137,16 +141,17 @@ protected:
 struct castint : unary_op {
   interval operator()(const interval& x) override
   {
-#define CAST(x) ( isfinite(x) ? (double)(int)(x) : (x))
-    return interval{CAST(input->L), CAST(input->R)};
+    return interval{floor(x.L), ceil(x.R)};
   }
 };
 struct cp : unary_op {
-  interval operator()(const interval& x) override { return *input; }
+  interval operator()(const interval& x) override { return x; }
 };
 struct generic_func_call : OP {
   vector<const interval*> input;
-  generic_func_call(int ary) : input(ary) {}
+  explicit generic_func_call(int ary) : input() {
+    input.resize(ary);
+  }
   void set_input(const interval* val, int which) override
   {
     assert((unsigned)which < input.size());
@@ -156,7 +161,7 @@ struct generic_func_call : OP {
 
 struct phi : generic_func_call {
   phi(int ary) : generic_func_call(ary) {}
-  bool eval() override
+  bool same_after_eval() override
   {
     old_output = output;
     int s = (int)input.size();
@@ -183,7 +188,6 @@ struct func_call : generic_func_call {
   string func_name;
   func_call(int ary, const string& _func_name)
       : generic_func_call(ary), func_name(_func_name) {}
-  vector<const interval*> input;
-  bool eval() override;
+  bool same_after_eval() override;
 };
 #endif

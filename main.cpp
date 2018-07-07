@@ -7,25 +7,34 @@
 {
   printf(R"(
 Usage:
-  %s  -f <function_name> -I <interval_1> ... -I <interval_n> [-v]
-interval:
-  NUMBER,NUMBER        No space is allowed around the comma ','
-The program SSA file should be standard input, and
-n is the number of the arguments of <function_mame>.
- Debug output is turned on if '-v' is specified. )", prog);
+  %s [-v] [-g <graph_file>] -f <function_name> -I <interval_1> ... -I <interval_n>  <file>
+Options:
+  -f    Mandatory. You have to specify the entry function name
+
+  -I    Mandatory. You have to specify the input range(s) of the argument(s)
+        of the entry function. <interval> should be
+          NUMBER,NUMBER
+        where NUMBER is a floating point literal including '+infinity'
+
+  -v    Enable verbose mode
+
+  -g    Dump the constraint graph to <graph_file> in DOT language,
+        which may be later visualized with GraphViz.
+ )", prog);
   exit(2);
 }
-
+extern FILE* yyin;
 bool verbose;
+FILE* graph_file = nullptr;
+extern int yydebug;
 int main(int argc, char **argv)
 {
-  yyparse();
   vector<interval> arg;
-  func *F = nullptr;
-  for (int opt; (opt = getopt(argc, argv, "f:I:v")) != -1;) {
+  string func_name;
+  for (int opt; (opt = getopt(argc, argv, "f:I:vg:")) != -1;) {
     switch (opt) {
     case 'v':
-      verbose = true;
+      yydebug = verbose = true;
       break;
     case 'I': {
       interval I;
@@ -34,13 +43,30 @@ int main(int argc, char **argv)
       break;
     }
     case 'f':
-      F = func_table[optarg];
+      func_name = optarg;
+      break;
+    case 'g':
+      graph_file = fopen(optarg, "w");
+      if (!graph_file) {
+        fprintf(stderr, "Invalid graph file path\n");
+        print_usage(argv[0]);
+      }
       break;
     default:
       print_usage(argv[0]);
     }
   }
-  if (!F) { print_usage(argv[0]); }
-  F->eval(arg);
-  printf("[%lf, %lf]\n", F->ret->L, F->ret->R);
+  if (optind >= argc) {
+    print_usage(argv[0]);
+  } else {
+    yyin = fopen(argv[optind], "r");
+  }
+  yyparse();
+  func* F = name2func[func_name];
+  if (!F) {
+    fprintf(stderr, "cannot find func");
+    print_usage(argv[0]);
+  }
+  interval x = F->eval(arg);
+  printf("[%lf, %lf]\n", x.L, x.R);
 }

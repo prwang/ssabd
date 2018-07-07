@@ -22,7 +22,7 @@ static inline void propagate(int scc_id, function<void(OP *)> cb)
     OP *nd = id2node[u];
     assert(nd);
     if (clear) { nd->output = interval(); }
-    if (nd->eval()) {
+    if (!nd->same_after_eval()) {
       in_queue[u] = true;
       Q.push(u);
     }
@@ -35,7 +35,7 @@ static inline void propagate(int scc_id, function<void(OP *)> cb)
       if (!p->is_cut) {
         OP *nd = id2node[p->v];
         assert(nd);
-        if (nd->eval()) {
+        if (!nd->same_after_eval()) {
           in_queue[p->v] = true;
           Q.push(p->v);
         }

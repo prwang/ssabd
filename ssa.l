@@ -2,40 +2,39 @@
 #include "SDT.h"
 #include "parser.hh"
 void yyerror(const char *s);
-#define STR yylval.slv = string(yytext)
+#define STR do { if (!yytext) abort();  yylval.slv = string(yytext); } while (false)
 %}
-%x phi comment
+%x phi
 
 
 ndg [_A-Za-z]
 dg [0-9]
 blank ([ \f\r\t\v]+)
 
-const [-+]?({dg}+|{dg}*.{dg}+)([eE][-+]?[0-9]+)?
+const [-+]?({dg}+|{dg}*[.]{dg}+)([eE][-+]?[0-9]+)?
 id_ign {ndg}+[.]{dg}+
-id ({ndg}|{dg})*_({dg}+)?
-id_ext \({dg}+|D\)
+id {ndg}({ndg}|{dg})*(_{dg}+)?
+id_ext [(]({dg}+|D)[)]
 %%
-";;"          { BEGIN comment; }
+";;".*"\n"    yylineno++;
 "#"           { BEGIN phi; }
-<comment>"\n" { BEGIN INITIAL; }
-
-<phi>"\n"     { BEGIN INITIAL; }
+<phi>"\n"     { yylineno++;  BEGIN INITIAL; }
 <phi>=        return ASN;
-<phi>{id}     { STR; return PHIID; }
 <phi>PHI      return PHI;
+
+<phi>{id}     { STR; return PHIID; }
+<phi>{id_ext} { STR; return IDEXT; }
 <phi>{blank}+ ;
 <phi><        return PHILT;
 <phi>>        return PHIGT;
 <phi>","      return CMA;
 
-{id}          { STR; return ID; }
-{id_ext}      { STR; return IDEXT; }
+
+"\n"          yylineno++;
+{blank}+      ;
 [><]=?|[=!]=  { STR; return RELOP; }
+=             return ASN;
 [-+*/]        { STR;  return ARIOP; }
-"<bb "{dg}+">"  { STR; return LABEL; }
-"<L"{dg}+">"      { return RLABEL; }
-const         { sscanf(yytext, "%lf", &yylval.clv); return CONST; }
 "("           return LP;
 ")"           return RP;
 "{"           return LB;
@@ -44,11 +43,16 @@ const         { sscanf(yytext, "%lf", &yylval.clv); return CONST; }
 ":"           return COL;
 ";"           return SCOL;
 if            return IF;
+else          return ELSE;
 goto          return GOTO;
 return        return RETURN;
 int           return INT;
 float         return FLOAT;
-=             return ASN;
+{id}|{id_ign} { STR; return ID; }
+{id_ext}      { STR; return IDEXT; }
+{const}       { sscanf(yytext, "%lf", &yylval.clv); return CONST; }
+"<bb "{dg}+">"  { STR; return LABEL; }
+"<L"{dg}+">"      { return RLABEL; }
 
 . {
   printf("%d: unexpected token %s\n", yylineno, yytext);
