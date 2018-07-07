@@ -75,7 +75,9 @@ struct IBR {
   string bb;
   OP *node;
   int which;
+  bool is_argument;
 };
+#define DEFAULT_START_BB_NAME  ";DEFAULT_START_BB_NAME"
 #define DEFAULT_RET_BB_NAME ";DEFAULT_RET_BB_NAME"
 
 struct func {
@@ -108,6 +110,8 @@ struct func {
       LOGM("set name2arg %s %p\n", argname[i].c_str(), &args[i]);
       name2arg[argname[i]] = &args[i];
     }
+    current_bb = DEFAULT_START_BB_NAME;
+    fall = true;
     LOGM("ctor done\n");
   }
 
@@ -118,8 +122,10 @@ struct func {
       delete x.second;
     }
   }
+
   void setbb() { setbb(DEFAULT_RET_BB_NAME); }
-  void setbb(const string& name)
+
+  void setbb(const string &name)
   {
     if (fall) {
       cfg[current_bb].out[0] = name;
@@ -128,11 +134,13 @@ struct func {
     current_bb = name;
     current_bb_defs.clear();
   }
-  void set_cfg(const string& b1, const string &b2)
+
+  void set_cfg(const string &b1, const string &b2)
   {
     cfg[current_bb].out[0] = b1;
     cfg[current_bb].out[1] = b2;
   }
+
   bool is_var_int(const string &varname)
   {
     return is_def_int[del_version(varname)];
@@ -159,6 +167,7 @@ struct func {
     }
     nodes[name] = op;
     current_bb_defs.insert(name);
+    id2bb[name] = current_bb;
     delete r;
   }
 
@@ -171,6 +180,7 @@ struct func {
     do_rval(r, op, 1);
     nodes[name] = op;
     current_bb_defs.insert(name);
+    id2bb[name] = current_bb;
   }
 
   void add_unary(const string &name, unary_op *op, const RVAL &rv)
@@ -178,6 +188,7 @@ struct func {
     do_rval(rv, op, 0);
     nodes[name] = op;
     current_bb_defs.insert(name);
+    id2bb[name] = current_bb;
   }
 
   void add_return(const string &name)
@@ -196,6 +207,7 @@ struct func {
     _add_rel(op, &bb_t, &bb_f, &l, &r);
     set_cfg(bb_t, bb_f);
   }
+
   bool fall;
 private:
   interval *ret; /// \brief 返回值变量位置
@@ -206,6 +218,7 @@ private:
   unordered_map<string, OP *> nodes; /// \brief 变量定义表
   unordered_map<string, bool> is_def_int; ///\brief 变量类型表
   void dump_graph();
+
   static binary_op *make_ari_node(const string &op)
   {
     const char *s = op.c_str();
@@ -219,76 +232,89 @@ private:
         return new mul();
       case '/' :
         return new _div();
-      default: assert(false);
+      default:
+        assert(false);
       }
     } else
       assert(false);
 
   }
-    enum pst_t {
-      CP_NUL = 0b00,
-      CP_TRUE = 0b01,
-      CP_FALSE = 0b10,
-      CP_MIXED = 0b11,
-    };
-    struct cfg_t {
-      string out[2];
-      int cfg_pstate;
-    };
-    unordered_map<string, cfg_t> cfg;
-    struct redir_proto {
 
-      string bb_t, bb_f, ovar, var_t, var_f;
-      func* up;
-      string bb_kill;
-      void operator()()
-      {
-        queue<string> Q;
-        for (auto& u : up->cfg)
-          u.second.cfg_pstate = CP_NUL;
+  enum pst_t {
+    CP_NUL = 0b00,
+    CP_TRUE = 0b01,
+    CP_FALSE = 0b10,
+    CP_MIXED = 0b11,
+  };
+  struct cfg_t {
+    string out[2];
+    int cfg_pstate;
+  };
+  unordered_map<string, cfg_t> cfg;
 
-        up->cfg[bb_t].cfg_pstate |= CP_TRUE;
-        up->cfg[bb_f].cfg_pstate |= CP_FALSE;
-        Q.push(bb_t); Q.push(bb_f);
-        while (Q.size()) {
-          string s = Q.front();
-          Q.pop();
-          if (s == bb_kill)
-            continue;
-          const cfg_t &g = up->cfg[s];
-          for (int i = 0; i < 2; ++i) {
-            if (g.out[i].size() && g.out[i] != DEFAULT_RET_BB_NAME) {
-              cfg_t &g1 = up->cfg[g.out[i]];
-              assert(g1.out[0].size() || g1.out[1].size());
-              int x = g1.cfg_pstate | g.cfg_pstate;
+  struct redir_proto {
 
-              if (x != g1.cfg_pstate) {
-                LOGM("--updating %s with %s = %d, prev %d\n" , g.out[i].c_str(),
-                s.c_str(), g.cfg_pstate, g1.cfg_pstate);
-                g1.cfg_pstate = x;
-                Q.push(g.out[i]);
-              }
+    string bb_t, bb_f, ovar, var_t, var_f;
+    func *up;
+    string bb_kill;
+
+    void operator()()
+    {
+      queue<string> Q;
+      for (auto &u : up->cfg) {
+        u.second.cfg_pstate = CP_NUL;
+      }
+      string bb_all = up->id2bb[ovar];
+      up->cfg[bb_all].cfg_pstate |= CP_MIXED;
+      up->cfg[bb_t].cfg_pstate |= CP_TRUE;
+      up->cfg[bb_f].cfg_pstate |= CP_FALSE;
+      Q.push(bb_all);
+      Q.push(bb_t);
+      Q.push(bb_f);
+
+      while (Q.size()) {
+        string s = Q.front();
+        Q.pop();
+        if (s == bb_kill) {
+          continue;
+        }
+        const cfg_t &g = up->cfg[s];
+        for (int i = 0; i < 2; ++i) {
+          if (g.out[i].size() && g.out[i] != DEFAULT_RET_BB_NAME) {
+            cfg_t &g1 = up->cfg[g.out[i]];
+            assert(g1.out[0].size() || g1.out[1].size());
+            int x = g1.cfg_pstate | g.cfg_pstate;
+
+            if (x != g1.cfg_pstate) {
+              LOGM("--updating %s with %s = %d, prev %d\n", g.out[i].c_str(),
+                   s.c_str(), g.cfg_pstate, g1.cfg_pstate);
+              g1.cfg_pstate = x;
+              Q.push(g.out[i]);
             }
           }
         }
-
-        for (const auto& u : up->cfg)
-          switch(u.second.cfg_pstate) {
-          case CP_TRUE:
-            up->redirection[make_pair(u.first, ovar)] = var_t;
-            break;
-          case CP_FALSE:
-            up->redirection[make_pair(u.first, ovar)] = var_f;
-            break;
-          default:;
-          }
-
-
       }
-    };
-    friend struct redir_proto;
-    vector<redir_proto> redirection0;
+      for (const auto &u : up->cfg) {
+        switch (u.second.cfg_pstate) {
+        case CP_TRUE:
+          up->redirection[make_pair(u.first, ovar)] = var_t;
+          break;
+        case CP_FALSE:
+          up->redirection[make_pair(u.first, ovar)] = var_f;
+          break;
+        default:;
+        }
+      }
+    }
+  };
+
+  friend struct redir_proto;
+  vector<redir_proto> redirection0;
+
+  unordered_map<string, string> id2bb;
+
   void do_topo();
+
   void _add_rel(const string &op,
                 const string *bb_t, const string *bb_f,
                 const RVAL *l, const RVAL *r)
@@ -311,48 +337,56 @@ do { \
     const char *s = op.c_str();
     if (s[2] == '\0' && s[1] == '=') {
       switch (s[0]) {
-      case '<': swlr = swtf = true; goto LESS;
-      case '>': swtf = true; goto LESS;
-      case '!': swtf = true; //fall through
+      case '<':
+        swlr = swtf = true;
+        goto LESS;
+      case '>':
+        swtf = true;
+        goto LESS;
+      case '!':
+        swtf = true; //fall through
       case '=':
         if (swtf) { swap(bb_t, bb_f); }
         if (l->isvar) {
           F(new _equal, ";true", bb_t, l, r);
-          const string& N = l->r.var;
+          const string &N = l->r.var;
           redirection0.push_back(redir_proto{
-          *bb_t, *bb_f, N, N + ";true", N, this, current_bb});
+              *bb_t, *bb_f, N, N + ";true", N, this, current_bb});
         }
         if (r->isvar) {
           F(new _equal, ";true", bb_t, r, l);
-          const string& N = r->r.var;
+          const string &N = r->r.var;
           redirection0.push_back(redir_proto{
-          *bb_t, *bb_f, N, N + ";true", N, this, current_bb});
+              *bb_t, *bb_f, N, N + ";true", N, this, current_bb});
         }
         return;
-      default: assert(false);
+      default:
+        assert(false);
       }
     } else if (s[1] == '\0') {
       switch (s[0]) {
-      case '>': swlr = true; //fall through
-      LESS: case '<':
+      case '>':
+        swlr = true; //fall through
+      LESS:
+      case '<':
         if (swtf) { swap(bb_t, bb_f); }
         if (swlr) { swap(l, r); }
 #define is_int(R) ((R).isvar ? is_var_int((R).r.var) : int((R).C) == (R).C)
         if (l->isvar) {
           bool I = is_var_int(l->r.var);
           if (I) { assert(is_int(*r)); }
-          F(new _less(I), ";true", bb_t, l, r) ;
-          F(new _greater(false), ";false", bb_f, l, r) ;
-          const string& N = l->r.var;
+          F(new _less(I), ";true", bb_t, l, r);
+          F(new _greater(false), ";false", bb_f, l, r);
+          const string &N = l->r.var;
           redirection0.push_back(redir_proto{
               *bb_t, *bb_f, N, N + ";true", N + ";false", this, current_bb});
         }
         if (r->isvar) {
           bool I = is_var_int(r->r.var);
           if (I) { assert(is_int(*l)); }
-          F(new _greater(I), ";true", bb_t, r, l) ;
-          F(new _less(false), ";false", bb_f, r, l) ;
-          const string& N = r->r.var;
+          F(new _greater(I), ";true", bb_t, r, l);
+          F(new _less(false), ";false", bb_f, r, l);
+          const string &N = r->r.var;
           redirection0.push_back(redir_proto{
               *bb_t, *bb_f, N, N + ";true", N + ";false", this, current_bb});
         }

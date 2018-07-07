@@ -62,12 +62,18 @@ int main(int argc, char **argv)
   if (optind >= argc) {
     print_usage(argv[0]);
   } else {
+    LOGM("file name is %s\n", argv[optind]);
     yyin = fopen(argv[optind], "r");
+    LOGM("error is %s\n", strerror(errno));
+  }
+  if (!yyin) {
+    fprintf(stderr, "cannot find the program\n");
+    print_usage(argv[0]);
   }
   yyparse();
   func* F = name2func[func_name];
   if (!F) {
-    fprintf(stderr, "cannot find func");
+    fprintf(stderr, "cannot find the func\n");
     print_usage(argv[0]);
   }
   interval x = F->eval(arg);

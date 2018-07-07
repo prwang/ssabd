@@ -74,7 +74,7 @@ MFinit  : {
               current_func->add_var_def(r);
             }
             delete $<defL_C>-2;
-          };        
+          };
 defL_S  : defL_S def SCOL { current_func->add_var_def($2); } | ;
 rid     : rid IDEXT { 
             $$ = $1;

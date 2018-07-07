@@ -25,10 +25,18 @@ void func::postfix()
     auto t = redirection.find(make_pair(i.bb, i.var));
     const string &key = (t == redirection.end() ? i.var : t->second);
     auto N = nodes.find(key);
-    assert(N != nodes.end());
-    OP *node = N->second;
-    i.node->set_input(&node->output, i.which);
-    add_edge(node->id, i.node->id);
+    if (N != nodes.end()) {
+      OP *node = N->second;
+      i.node->set_input(&node->output, i.which);
+      add_edge(node->id, i.node->id);
+    } else {
+      assert(i.is_argument);
+      assert(id2bb[i.var] == DEFAULT_START_BB_NAME);
+      auto it = name2arg.find(del_version(i.var));
+      assert(it != name2arg.end());
+      i.node->set_input(it->second, i.which);
+      add_edge(first_node, i.node->id);
+    }
   }
   last_node = n_op;
   for (int i = first_node + 1; i <= last_node; ++i) {
@@ -61,15 +69,13 @@ void func::do_rval(const RVAL &rv, OP *op, int which)
       //case EXT:
         op->set_input(nullptr, which);
         LOGM("creating IBR: %s %s\n", rv.r.var.c_str(), current_bb.c_str());
-        interblock_refs.push_back(IBR{rv.r.var, current_bb, op, which});
+        interblock_refs.push_back(IBR{rv.r.var, current_bb, op, which, false});
       }
       break;
     }
     case ARG: {
-      auto it = name2arg.find(del_version(rv.r.var));
-      assert(it != name2arg.end());
-      op->set_input(it->second, which);
-      add_edge(first_node, op->id);
+      id2bb[rv.r.var] = DEFAULT_START_BB_NAME;
+      interblock_refs.push_back(IBR{rv.r.var, current_bb, op, which, true});
       break;
     }
     default:
