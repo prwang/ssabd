@@ -21,7 +21,7 @@ using namespace std;
 
 extern int n_op, n_scc;  /// \brief 最后一个节点、强连通分量编号
 extern FILE* graph_file;
-
+extern int id2scc[maxn];
 extern bool allow_same_scc;
 extern unordered_map<string, struct func*> name2func;
 extern struct OP *id2node[maxn];

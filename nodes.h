@@ -57,7 +57,7 @@ struct sub : binary_op {
   interval operator()(const interval &a, const interval &b) override
   {
     if (a.is_empty() || b.is_empty()) { return interval(); }
-    return interval(a.L - b.L, a.R - b.R);
+    return interval(a.L - b.R, a.R - b.L);
   }
 };
 

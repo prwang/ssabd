@@ -12,12 +12,12 @@ edge *G[maxn], *G_topo[maxn],
     pool[maxn * 10], *pool_end = pool;
 
 int n_op, n_scc; //节点、scc个数
-static int id2scc[maxn], in_deg[maxn]; //对应等价类，scc入度
+int id2scc[maxn], in_deg[maxn]; //对应等价类，scc入度
 vector<int> scc_cont[maxn];
 
 inline void add_edge3(int u, int v, edge **G1)
 {
-  G1[u] = new(pool_end++) edge{false, v, G1[u]};
+  G1[u] = new(pool_end++) edge{v, G1[u]};
 }
 
 void add_edge(int u, int v) { add_edge3(u, v, G); }
@@ -35,9 +35,6 @@ static void tarjan(int u)
     if (!dfn[v]) {
       tarjan(v);
       low[u] = min(low[u], low[v]);
-      if (dfn[u] < low[v]) {
-        p->is_cut = true;
-      }
     } else if (!id2scc[v]) {
       low[u] = min(low[u], dfn[v]);
     }
@@ -55,7 +52,6 @@ static void tarjan(int u)
   }
 }
 
-/// \brief 强连通分量缩点并拓扑排序
 void func::dump_graph()
 {
   for (int u = first_node; u <= last_node; ++u) {
@@ -71,6 +67,7 @@ void func::dump_graph()
           typeid(*id2node[ret_id]).name(), ret_id, id2scc[ret_id]);
   fflush(graph_file);
 }
+/// \brief 强连通分量缩点并拓扑排序
 void func::do_topo()
 {
   //求强连通分量
@@ -79,8 +76,8 @@ void func::do_topo()
   for (int u = first_node; u <= last_node; ++u) {
     int u1 = id2scc[u];
     for (edge *p = G[u]; p; p = p->next) {
-      if (p->is_cut) {
-        int v1 = id2scc[p->v];
+      int v1 = id2scc[p->v];
+      if (v1 != u1) {
         add_edge3(u1, v1, G_topo);
         ++in_deg[v1];
       } else {

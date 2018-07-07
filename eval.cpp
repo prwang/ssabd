@@ -32,7 +32,7 @@ static inline void propagate(int scc_id, function<void(OP *)> cb)
     Q.pop();
     in_queue[u] = false;
     for (edge *p = G[u]; p; p = p->next) {
-      if (!p->is_cut) {
+      if (id2scc[p->v] == id2scc[u]) {
         OP *nd = id2node[p->v];
         assert(nd);
         if (!nd->same_after_eval()) {

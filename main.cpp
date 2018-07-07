@@ -27,14 +27,17 @@ extern FILE* yyin;
 bool verbose;
 FILE* graph_file = nullptr;
 extern int yydebug;
+extern int yy_flex_debug;
 int main(int argc, char **argv)
 {
+
   vector<interval> arg;
   string func_name;
+  yy_flex_debug = 0;
   for (int opt; (opt = getopt(argc, argv, "f:I:vg:")) != -1;) {
     switch (opt) {
     case 'v':
-      yydebug = verbose = true;
+      yy_flex_debug = yydebug = verbose = true;
       break;
     case 'I': {
       interval I;

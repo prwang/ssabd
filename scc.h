@@ -7,7 +7,7 @@
 #include "common.h"
 void add_edge(int u, int v);
 extern struct edge {
-  bool is_cut; int v;
+  int v;
   edge* next;
 } *G[maxn], *G_topo[maxn],
     pool[maxn * 10], *pool_end;
